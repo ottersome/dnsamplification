@@ -61,21 +61,35 @@ struct dnsQuestions{
     unsigned short int qclass; 
 
 };
-struct endOfData{
+//struct endOfData{
+//    unsigned short int type;
+//    unsigned short int dclass;
+//};
+//struct rdata{
+//    unsigned short type;
+//    unsigned short _class;
+//    unsigned int ttl;
+//    unsigned short data_len;
+//};
+struct dnsAns{
     unsigned short int type;
-    unsigned short int dclass;
-};
-struct rdata{
-    unsigned short type;
-    unsigned short _class;
+    unsigned short int aclass;
     unsigned int ttl;
-    unsigned short data_len;
+    unsigned short int rdlength;
+    unsigned short int nothing;
+    unsigned int rdata;//Since im assuming A records
+    //RData goes here;
 };
 struct records{
     unsigned char *name;
     struct rdata *resources;
     unsigned char * rdata;
-}
+};
+//struct ethhdr{
+//    unsigned char h_dest[ETH_ALEN];
+//    unsigned char h_dest[ETH_ALEN];
+//    __be16        h_proto;
+//};
 void fillDnsHeader(struct dnsheader * dns, struct dnsQuestions * dnsq);
 void chngToDnsFormat(unsigned char* res, unsigned char* ori_host );
 void getDnsServers();
