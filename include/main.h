@@ -8,28 +8,32 @@
                         // corresponding protocol families PF_INET and PF_INET6.
 #include <arpa/inet.h>  // Functions for manipulating numeric IP addresses.
 #include <netdb.h>      // Name resolution
+#include <netinet/udp.h> 
+#include <netinet/ip.h>  
 
-struct sockaddr_in ina;
-struct ipheader {
-    unsigned char      iph_ihl:4, iph_ver:4;
-    unsigned char      iph_tos;
-    unsigned short int iph_len;
-    unsigned short int iph_ident;
-    //    unsigned char      iph_flag;
-    unsigned short int iph_offset;
-    unsigned char      iph_ttl;
-    unsigned char      iph_protocol;
-    unsigned short int iph_chksum;
-    unsigned int       iph_sourceip;
-    unsigned int       iph_destip;
-};
-
-struct udpheader{
-    unsigned short int udph_srcport;
-    unsigned short int udph_destport;
-    unsigned short int udph_len;
-    unsigned short int udph_chksum;
-};
+typedef unsigned int ui;
+typedef unsigned long int uli;
+struct sockaddr_in hostIp;
+//struct ipheader {
+//    unsigned char      iph_ihl:4, iph_ver:4;
+//    unsigned char      iph_tos;
+//    unsigned short int iph_len;
+//    unsigned short int iph_ident;
+//    //    unsigned char      iph_flag;
+//    unsigned short int iph_offset;
+//    unsigned char      iph_ttl;
+//    unsigned char      iph_protocol;
+//    unsigned short int iph_chksum;
+//    unsigned int       iph_sourceip;
+//    unsigned int       iph_destip;
+//};
+//
+//struct udpheader{
+//    unsigned short int udph_srcport;
+//    unsigned short int udph_destport;
+//    unsigned short int udph_len;
+//    unsigned short int udph_chksum;
+//};
 struct dnsheader{
     //Copied to corresponding reply. Used to match replies to quieries
     unsigned short int query_id;
@@ -61,6 +65,31 @@ struct dnsQuestions{
     unsigned short int qclass; 
 
 };
+struct dnsAns{
+    unsigned short int type;
+    unsigned short int aclass;
+    unsigned int ttl;
+    unsigned short int rdlength;
+    unsigned short int nothing;
+    unsigned int rdata;
+};
+struct records{
+    unsigned char *name;
+    struct rdata *resources;
+    unsigned char * rdata;
+};
+ 
+//struct ethhdr{
+//    unsigned char h_dest[ETH_ALEN];
+//    unsigned char h_dest[ETH_ALEN];
+//    __be16        h_proto;
+//};
+void fillDnsHeader(struct dnsheader * dns, struct dnsQuestions * dnsq);
+void fillIpHeader(unsigned char * packetPtr,iphdr* ip,uli dataLength,sockaddr_in & source_ip,sockaddr_in & destIpData );
+void fillUdpHeader(udphdr * udp,uli dataLength);
+void chngToDnsFormat(unsigned char* res, unsigned char* ori_host );
+unsigned short csum(unsigned short * ptr, int nbytes);
+void getDnsServers();
 //struct endOfData{
 //    unsigned short int type;
 //    unsigned short int dclass;
@@ -71,25 +100,3 @@ struct dnsQuestions{
 //    unsigned int ttl;
 //    unsigned short data_len;
 //};
-struct dnsAns{
-    unsigned short int type;
-    unsigned short int aclass;
-    unsigned int ttl;
-    unsigned short int rdlength;
-    unsigned short int nothing;
-    unsigned int rdata;//Since im assuming A records
-    //RData goes here;
-};
-struct records{
-    unsigned char *name;
-    struct rdata *resources;
-    unsigned char * rdata;
-};
-//struct ethhdr{
-//    unsigned char h_dest[ETH_ALEN];
-//    unsigned char h_dest[ETH_ALEN];
-//    __be16        h_proto;
-//};
-void fillDnsHeader(struct dnsheader * dns, struct dnsQuestions * dnsq);
-void chngToDnsFormat(unsigned char* res, unsigned char* ori_host );
-void getDnsServers();

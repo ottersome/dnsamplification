@@ -1,6 +1,9 @@
+//TODO: Need to make sure that the checksum for ip and all the 
+//  entries in each header are right, I just coded the structure, need to make sure the
+//  data we are passing is valid
+#include <netinet/udp.h>
 #include <unistd.h>
 #include <iostream>
-#include "main.h"//Structs and prototypes here
 #include <cstring>
 #include <cmath>
 #include <iostream>
@@ -8,8 +11,10 @@
 #include <fstream>
 #include <vector>
 #include <iomanip>
+#include "main.h"//Structs and prototypes here
 
 #define BUFFSIZE ((int)pow(2,16))
+#define DOMNAME "www.luisgarciaz.com"
 
 //Remmember that linux is little-endian 
 //  and networks tend to be big endian.
@@ -17,15 +22,15 @@ unsigned char * qname;
 unsigned char packetBuff[BUFFSIZE];
 struct dnsQuestions * dnsquestion;
 struct sockaddr_in dest;
+struct pseudoheader{};
 int qnameStrlen = 0;
 std::vector<std::string> dnsAddresses;
+
 
 //getaddrinfo (related to DNS lookup)
 //Firewall->What hids your internal ip addresses from the rest of the world. 
 //  They use Network Address Translation. (This process changes local ips to remote ips)
 //  Nat also allows helps for us not to run out of IPV4 ips
-//
-typedef unsigned int ui;
 std::ofstream pckSentBin;
 std::ofstream pcktRecvBin;
 void printHexTillNBytes(unsigned char * mem,ui nBytes){
@@ -66,42 +71,55 @@ void printHexTillNull(unsigned char * mem){
 }
 int main(){
     getDnsServers();
+
+    /***********************************
+     * Opening files for packets
+    ***********************************/
     pckSentBin.open("./sentPacket.bin",std::ofstream::binary |std::ofstream::out);
     pcktRecvBin.open("./recvPacket.bin",std::ofstream::binary |std::ofstream::out);
-    inet_pton(AF_INET,"Ip adrress here",&(ina.sin_addr));//Old way is with inet_addr
+    //Getting address here?
+    inet_pton(AF_INET,"Ip adrress here",&(hostIp.sin_addr));//Old way is with inet_addr
 
+    /***********************************
+     * Setting socket up
+    ***********************************/
+    //Declaring headers and memory allocation
+    struct iphdr *ip = (struct iphdr*) packetBuff;
+    struct udphdr *udp = (struct udphdr*) (packetBuff + sizeof(struct iphdr));
+    struct dnsheader *dns = (struct dnsheader*) &packetBuff[0];
+    //char * pseudogram,*data;
+    struct pseudoheader psh;
+    //ZERO-OUt the packetBuff
     memset(packetBuff,0,BUFFSIZE);
 
-    /***********************************
-     * Aligning Pointers
-    ***********************************/
-    //struct ipheader *ip = (struct ipheader*) packetBuff;
-    //struct udpheader *udp = (struct udpheader*) (packetBuff + sizeof(struct ipheader));
-    //struct dnsheader *dns = (struct dnsheader*) (udp + sizeof(struct udpheader));
+    //Setting socket sockaddr_in info
+    //printf("We'll be using the dns addres :: %s",dnsAddresses[2].c_str());
+
     dest.sin_family = AF_INET;
     dest.sin_port = htons(53);
-    printf("We'll be using the dns addres :: %s",dnsAddresses[2].c_str());
-    //MAKE SURE TO CHANGE THIS 
     dest.sin_addr.s_addr = inet_addr("8.8.8.8");
     std::cout << "We have "<<dest.sin_addr.s_addr<<" as dns address"<<std::endl;
-    struct dnsheader *dns = (struct dnsheader*) &packetBuff[0];
 
-    char * data = (char *)(dns + sizeof(struct dnsheader));
+    uli dataLength = sizeof(struct dnsheader)+sizeof(struct dnsQuestions)+strlen(DOMNAME)+1;
+    //TODO: Not so sure if the functions inside are correct or even the params are right in
+    //   their format and stuff so you ahve to check here if you get any error
     /***********************************
-     * Structuring the Packet
+     * Filling Headers
     ***********************************/
+    fillIpHeader(packetBuff,ip,dataLength,hostIp,dest);
+    fillUdpHeader(udp,dataLength-sizeof(struct udphdr));
     fillDnsHeader(dns,dnsquestion);
-    unsigned short * idso= (unsigned short*)&packetBuff[0];
-    std::cout << "The id that is being sent is :"<<ntohs(*idso)<<std::endl;
+
     /***********************************
      * Settings
     ***********************************/
     //Get socket descriptor
-    //int sd = socket(AF_INET,SOCK_RAW,IPPROTO_UDP);//file descriptor for socket
-    int sd = socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);//file descriptor for socketk
+    int sd = socket(AF_INET,SOCK_RAW,IPPROTO_UDP);//file descriptor for socket
+    //int sd = socket(AF_INET,SOCK_DGRAM,IPPROTO_UDP);//file descriptor for socketk
+    std::cout<<"THis is it"<<std::ees;
     if(sd<0){
-        std::cerr << "FATAL: Error opening the socket"<<std::endl;
-        return -1;
+        perror("FATAL, error when opening socket:");
+        exit(-1);
     }
 
     std::cout << "Done with our constrction, now sending packet "<<std::endl;
@@ -120,9 +138,11 @@ int main(){
     {
         std::cout<<"Error while sending"<<std::endl;
     }
+
     memset(packetBuff,0,BUFFSIZE);
     socklen_t sockLen = (socklen_t)sizeof dest;
     std::cout <<"Receiving answer"<<std::endl;
+
     int recvFromRes = recvfrom(
             sd,
             (char*)&packetBuff[0],
@@ -203,7 +223,7 @@ void fillDnsHeader(struct dnsheader * dns, struct dnsQuestions * dnsq){
     qname = (unsigned char*) dns + (sizeof(struct dnsheader));
     unsigned char  hostName[100];
     memset(hostName,0,sizeof(hostName));
-    strcpy((char*)hostName,"www.luisgarciaz.com");
+    strcpy((char*)hostName,DOMNAME);
     chngToDnsFormat(qname,hostName);//This shoudl work fine
 
     dnsq = (dnsQuestions*)(qname + strlen((const char*)qname)+1);
@@ -253,6 +273,53 @@ void getDnsServers(){
     }
 
 }
+unsigned short csum(unsigned short *ptr,int nbytes) 
+{
+	register long sum;
+	unsigned short oddbyte;
+	register short answer;
+
+	sum=0;
+	while(nbytes>1) {
+		sum+=*ptr++;
+		nbytes-=2;
+	}
+	if(nbytes==1) {
+		oddbyte=0;
+		*((u_char*)&oddbyte)=*(u_char*)ptr;
+		sum+=oddbyte;
+	}
+
+	sum = (sum>>16)+(sum & 0xffff);
+	sum = sum + (sum>>16);
+	answer=(short)~sum;
+	
+	return(answer);
+}
+void fillIpHeader(unsigned char * packetPtr, iphdr* ip,uli dataLength,sockaddr_in & source_ip,sockaddr_in & destIpData ){
+    ip->ihl = 5;
+	ip->version = 4;
+	ip->tos = 0;
+	ip->tot_len = sizeof(struct iphdr)+sizeof(struct udphdr) + dataLength/*strlen(data)*/;//Not so sure about this one rigck 
+	ip->id = htonl (54321);	//Id of this packet
+	ip->frag_off = 0;
+	ip->ttl = 255;
+	ip->protocol = IPPROTO_UDP;
+	ip->check = 0;		//Set to 0 before calculating checksum
+	ip->saddr = source_ip.sin_addr.s_addr;	//Spoof the source ip addresIs
+	ip->daddr = destIpData.sin_addr.s_addr;
+	//Ip checksum
+	ip->check = csum ((unsigned short *) packetPtr, ip->tot_len);
+}
+void fillUdpHeader(udphdr * udp,uli dataLength){
+	udp->source = htons (6666);
+	udp->dest = htons (8622);
+	udp->len = htons(8 + dataLength/*strlen(data)*/);	//tcp header size
+	udp->check = 0;	//leave checksum 0 now, filled later by pseudo header
+}
+
+
+
 //void parseAnswer(char * readPointer, char * buff){
 //    
 //    struct dnsheader *dns = (struct dnsheader*) &packetBuff[0];
@@ -291,7 +358,7 @@ void getDnsServers(){
         return -1;
     }*/
     //Make sure to get the port
-    int yes=1;
+    //int yes=1;
     //if(setsockopt(listener,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof yes) == -1){
     //    perror("Error at forcing socket binding");
     //    exit(1);
